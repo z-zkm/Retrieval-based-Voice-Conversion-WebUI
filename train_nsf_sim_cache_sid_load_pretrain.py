@@ -1,20 +1,20 @@
-import sys, os
+import os, sys
 
 now_dir = os.getcwd()
 sys.path.append(os.path.join(now_dir))
-sys.path.append(os.path.join(now_dir, "train"))
-import utils
+
+from lib.train import utils
 import datetime
 
 hps = utils.get_hparams()
 os.environ["CUDA_VISIBLE_DEVICES"] = hps.gpus.replace("-", ",")
 n_gpus = len(hps.gpus.split("-"))
 from random import shuffle, randint
-import traceback, json, argparse, itertools, math, torch, pdb
+
+import torch
 
 torch.backends.cudnn.deterministic = False
 torch.backends.cudnn.benchmark = False
-from torch import nn, optim
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
@@ -25,7 +25,7 @@ from torch.cuda.amp import autocast, GradScaler
 from lib.infer_pack import commons
 from time import sleep
 from time import time as ttime
-from data_utils import (
+from lib.train.data_utils import (
     TextAudioLoaderMultiNSFsid,
     TextAudioLoader,
     TextAudioCollateMultiNSFsid,
@@ -45,9 +45,9 @@ else:
         SynthesizerTrnMs768NSFsid_nono as RVC_Model_nof0,
         MultiPeriodDiscriminatorV2 as MultiPeriodDiscriminator,
     )
-from losses import generator_loss, discriminator_loss, feature_loss, kl_loss
-from mel_processing import mel_spectrogram_torch, spec_to_mel_torch
-from process_ckpt import savee
+from lib.train.losses import generator_loss, discriminator_loss, feature_loss, kl_loss
+from lib.train.mel_processing import mel_spectrogram_torch, spec_to_mel_torch
+from lib.train.process_ckpt import savee
 
 global_step = 0
 
@@ -67,7 +67,12 @@ class EpochRecorder:
 
 def main():
     n_gpus = torch.cuda.device_count()
+
     if torch.cuda.is_available() == False and torch.backends.mps.is_available() == True:
+        n_gpus = 1
+    if n_gpus < 1:
+        # patch to unblock people without gpus. there is probably a better way.
+        print("NO GPU DETECTED: falling back to CPU - this may take a while")
         n_gpus = 1
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = str(randint(20000, 55555))
